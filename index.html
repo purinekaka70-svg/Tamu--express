@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -46,7 +45,7 @@ const db = getFirestore(app);
 // Variables
 let hotels=[], restaurants=[], orders=[];
 let cart=[], currentTab="restaurants", currentHotelId=null, currentAdmin=null;
-const SERVICE_FEE = 40 (0115613332);
+const SERVICE_FEE = 40;
 const SUBSCRIPTION_FEE = 100;
 const ADMIN = { user: "admin", pass: "TamuAdmin@2025" };
 const appDiv = document.getElementById("app");
@@ -86,7 +85,7 @@ function switchTab(tab){
 }
 
 function getHotelById(id){
-  return hotels.find(h=>h.id===id)||{name:"Unknown",till:"0115613332",subscriptionExpiry:0, blocked:false};
+  return hotels.find(h=>h.id===id)||{name:"Unknown",till:"0115613332",subscriptionExpiry:0, blocked:false, approved:true};
 }
 
 // ===== Render functions =====
@@ -100,10 +99,10 @@ function render(){
 // --- Restaurants --- (Customer view)
 function renderRestaurants(){
   appDiv.innerHTML=`<h2 class="text-xl font-semibold mb-3">All Restaurants</h2>
-  ${restaurants.map(r=>`
+  ${restaurants.filter(r => r.approved).map(r=>`
     <div class="bg-white p-4 rounded shadow mb-3">
       <h3 class="font-bold">${r.hotelName}</h3>
-      <p class="text-sm text-gray-500">Till: ${r.till}</p>
+      <p class="text-sm text-gray-500">Till: 0115613332</p>
       <div class="mt-2">
         ${r.menu?.length?r.menu.map(item=>`
           <div class="flex justify-between border-b py-2">
@@ -120,6 +119,7 @@ function renderRestaurants(){
       <p>Items Total: KSh ${cart.reduce((s,i)=>s+i.price,0)}</p>
       <p>Service Fee: KSh ${SERVICE_FEE}</p>
       <p>Total to Pay: <strong>KSh ${cart.reduce((s,i)=>s+i.price,0)+SERVICE_FEE}</strong></p>
+      <p class="text-sm text-gray-600 mt-1">Pay service fee to: <strong>Pochi Labiashara 0115613332</strong></p>
       <input id="custName" class="border p-1 w-full mt-2" placeholder="Your name">
       <input id="custPhone" class="border p-1 w-full mt-2" placeholder="Your phone">
       <div class="mt-2 flex gap-2">
@@ -129,7 +129,7 @@ function renderRestaurants(){
   </div>`;
 }
 
-// --- Orders --- (Customer sees their orders, Hotel sees theirs, Admin sees all)
+// --- Orders --- (Customer sees theirs, Hotel sees theirs, Admin sees all)
 function renderOrders(){
   let visibleOrders;
   if(currentHotelId){ 
@@ -149,10 +149,10 @@ function renderOrders(){
         <div class="bg-white p-4 rounded shadow mb-3">
           <h3 class="font-semibold">${o.customerName}</h3>
           <p class="text-sm text-gray-600">Phone: ${o.customerPhone}</p>
-          <p class="text-sm text-gray-600">Hotel: ${hotel.name} | Till: ${hotel.till}</p>
+          <p class="text-sm text-gray-600">Hotel: ${hotel.name} | Till: 0115613332</p>
           <ul class="text-sm mt-2">${o.items.map(i=>`<li>${i.name} - KSh ${i.price}</li>`).join("")}</ul>
           <p class="text-sm mt-1">Items Total: KSh ${itemsTotal}</p>
-          <p class="text-sm mt-1">Service Fee:${SERVICE_FEE}</p>
+          <p class="text-sm mt-1">Service Fee: KSh ${SERVICE_FEE}</p>
           <p class="font-semibold mt-1">Total to Pay: KSh ${totalPay}</p>
         </div>`;
     }).join("")}
@@ -210,7 +210,7 @@ function renderHotelPortal(){
       </div>`;
 }
 
-// --- Admin --- (Block/unblock, Clear All)
+// --- Admin --- (Block/unblock, Approve, Clear All)
 function renderAdmin(){
   if(!currentAdmin){
     appDiv.innerHTML=`<form id="adminLogin" class="bg-white p-4 rounded shadow">
@@ -229,8 +229,12 @@ function renderAdmin(){
         <p class="font-semibold">${h.name}</p>
         <p>Till: ${h.till}</p>
         <p>Blocked: ${h.blocked?"Yes":"No"}</p>
+        <p>Approved: ${h.approved?"Yes":"No"}</p>
       </div>
-      <button type="button" data-id="${h.id}" class="toggleBlock bg-red-500 text-white px-2 py-1 rounded">${h.blocked?"Unblock":"Block"}</button>
+      <div class="flex gap-2">
+        <button type="button" data-id="${h.id}" class="toggleBlock bg-red-500 text-white px-2 py-1 rounded">${h.blocked?"Unblock":"Block"}</button>
+        ${!h.approved?`<button type="button" data-id="${h.id}" class="approveHotel bg-green-500 text-white px-2 py-1 rounded">Approve</button>`:""}
+      </div>
     </div>`).join("")}`;
 }
 
@@ -243,7 +247,7 @@ onSnapshot(collection(db,"hotels"),snap=>{
 onSnapshot(collection(db,"restaurants"),snap=>{
   restaurants=snap.docs.map(d=>{
     const hotel = getHotelById(d.data().hotelId);
-    return {id:d.id,...d.data(), hotelName: hotel.name, till: hotel.till};
+    return {id:d.id,...d.data(), hotelName: hotel.name, till: hotel.till, approved: hotel.approved};
   });
   render();
 });
@@ -281,7 +285,7 @@ document.addEventListener("click", async e=>{
     if(!name||!phone||cart.length===0)return alert("Fill name/phone and add items");
     const total=cart.reduce((s,i)=>s+i.price,0)+SERVICE_FEE;
     await addDoc(collection(db,"orders"),{customerName:name,customerPhone:phone,items:cart,total,hotelId:cart[0].hotelId});
-    alert("Order placed!");
+    alert("Order placed! Pay service fee to Pochi Labiashara 0115613332");
     cart=[];
     renderRestaurants();
   }
@@ -304,6 +308,13 @@ document.addEventListener("click", async e=>{
     const hotelRef=doc(db,"hotels",hid);
     const hotel=hotels.find(h=>h.id===hid);
     await updateDoc(hotelRef,{blocked:!hotel.blocked});
+  }
+
+  // Approve hotel
+  if(t.classList.contains("approveHotel")){
+    const hid=t.dataset.id;
+    const hotelRef=doc(db,"hotels",hid);
+    await updateDoc(hotelRef,{approved:true});
   }
 
   // Clear all data
@@ -330,8 +341,8 @@ document.addEventListener("submit", async e=>{
   if(f.id==="hotelLogin"){
     const name=f.name.value.trim();
     const pass=f.pass.value.trim();
-    const h=hotels.find(h=>h.name===name && h.pass===pass);
-    if(!h) return alert("Wrong credentials or hotel not registered");
+    const h=hotels.find(h=>h.name===name && h.pass===pass && h.approved);
+    if(!h) return alert("Wrong credentials or hotel not approved yet");
     currentHotelId=h.id;
     render();
   }
@@ -342,7 +353,8 @@ document.addEventListener("submit", async e=>{
     const pass=f.pass.value.trim();
     const till=f.till.value.trim();
     if(!name||!pass||!till) return alert("Fill all fields");
-    const docRef=await addDoc(collection(db,"hotels"),{name,pass,till,subscriptionExpiry:Date.now()+30*24*3600*1000, blocked:false});
+    const docRef=await addDoc(collection(db,"hotels"),{name,pass,till,subscriptionExpiry:Date.now()+30*24*3600*1000, blocked:false, approved:false});
+    alert("Hotel registered! Waiting admin approval.");
     currentHotelId=docRef.id;
     render();
   }
@@ -372,4 +384,4 @@ document.addEventListener("submit", async e=>{
 });
 </script>
 </body>
-  </html>
+</html>
