@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -27,7 +28,7 @@
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-app.js";
 import { 
-  getFirestore, collection, addDoc, setDoc, doc, onSnapshot, deleteDoc, updateDoc 
+  getFirestore, collection, addDoc, setDoc, doc, onSnapshot, getDocs, updateDoc, deleteDoc 
 } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-firestore.js";
 
 // Firebase config
@@ -44,7 +45,7 @@ const db = getFirestore(app);
 
 // Variables
 let hotels=[], restaurants=[], orders=[];
-let cart=[], currentTab="restaurants", currentHotelId=null, currentAdmin=null, currentCustomer=null;
+let cart=[], currentTab="restaurants", currentHotelId=null, currentAdmin=null;
 const SERVICE_FEE = 40;
 const SUBSCRIPTION_FEE = 100;
 const ADMIN = { user: "admin", pass: "TamuAdmin@2025" };
@@ -55,9 +56,11 @@ const adminTab = document.querySelector(".tab[data-tab='admin']");
 adminTab.style.display="none";
 
 // Tab click
-const tabs=document.querySelectorAll(".tab");
-tabs.forEach(btn=>btn.addEventListener("click",()=>switchTab(btn.dataset.tab)));
+document.querySelectorAll(".tab").forEach(btn=>{
+  btn.addEventListener("click",()=>switchTab(btn.dataset.tab));
+});
 
+// Show admin on footer click 4 times
 let footerClicks=0;
 document.getElementById("footer").addEventListener("click",()=>{
   footerClicks++;
@@ -70,7 +73,7 @@ document.getElementById("footer").addEventListener("click",()=>{
 
 function switchTab(tab){
   currentTab=tab;
-  tabs.forEach(b=>{
+  document.querySelectorAll(".tab").forEach(b=>{
     if(b.dataset.tab===tab){
       b.classList.add("bg-white","text-green-700","font-semibold");
       b.classList.remove("text-white");
@@ -82,7 +85,9 @@ function switchTab(tab){
   render();
 }
 
-function getHotelById(id){return hotels.find(h=>h.id===id)||{name:"Unknown",till:"0115613332",subscriptionExpiry:0, blocked:false};}
+function getHotelById(id){
+  return hotels.find(h=>h.id===id)||{name:"Unknown",till:"0115613332",subscriptionExpiry:0, blocked:false};
+}
 
 // ===== Render functions =====
 function render(){
@@ -92,13 +97,13 @@ function render(){
   else if(currentTab==="admin") renderAdmin();
 }
 
-// --- Restaurants ---
+// --- Restaurants --- (Customer view)
 function renderRestaurants(){
   appDiv.innerHTML=`<h2 class="text-xl font-semibold mb-3">All Restaurants</h2>
   ${restaurants.map(r=>`
     <div class="bg-white p-4 rounded shadow mb-3">
-      <h3 class="font-bold">${r.name}</h3>
-      <p class="text-sm text-gray-500">Till: ${getHotelById(r.hotelId).till}</p>
+      <h3 class="font-bold">${r.hotelName}</h3>
+      <p class="text-sm text-gray-500">Till: ${r.till}</p>
       <div class="mt-2">
         ${r.menu?.length?r.menu.map(item=>`
           <div class="flex justify-between border-b py-2">
@@ -124,19 +129,18 @@ function renderRestaurants(){
   </div>`;
 }
 
-// --- Orders ---
+// --- Orders --- (Customer sees their orders, Hotel sees theirs, Admin sees all)
 function renderOrders(){
-  let visibleOrders = [];
-  
+  let visibleOrders;
   if(currentHotelId){ 
     visibleOrders = orders.filter(o=>o.hotelId===currentHotelId); 
   } else if(currentAdmin){
     visibleOrders = orders;
-  } else if(currentCustomer){
-    visibleOrders = orders.filter(o=>o.customerName===currentCustomer.name && o.customerPhone===currentCustomer.phone);
+  } else {
+    visibleOrders = [];
   }
 
-  appDiv.innerHTML=`<h2 class="text-xl font-semibold mb-3">${currentHotelId?"Orders Received":currentAdmin?"All Orders":"Your Orders"}</h2>
+  appDiv.innerHTML=`<h2 class="text-xl font-semibold mb-3">Orders</h2>
     ${visibleOrders.length===0?"<p>No orders yet</p>":visibleOrders.map(o=>{
       const hotel=getHotelById(o.hotelId);
       const itemsTotal=o.items.reduce((s,i)=>s+i.price,0);
@@ -155,7 +159,7 @@ function renderOrders(){
   `;
 }
 
-// --- Hotel Portal ---
+// --- Hotel Portal --- (Add/Edit menu)
 function renderHotelPortal(){
   if(!currentHotelId){
     appDiv.innerHTML=`<div class="grid md:grid-cols-2 gap-4">
@@ -180,7 +184,7 @@ function renderHotelPortal(){
   if(!hotel) return;
   if(!hotel.subscriptionExpiry || hotel.subscriptionExpiry<Date.now() || hotel.blocked){
     appDiv.innerHTML=`<div class="bg-white p-4 rounded shadow">
-      <p class="text-red-600 font-bold">${hotel.blocked?"Your account is blocked by admin.":`Subscription expired. Pay KSh ${SUBSCRIPTION_FEE} to continue.`}</p>
+      <p class="text-red-600 font-bold">${hotel.blocked?"Blocked by admin":`Subscription expired. Pay KSh ${SUBSCRIPTION_FEE}`}</p>
       <button type="button" id="logoutHotel" class="bg-red-500 text-white px-3 py-1 rounded mt-3">Logout</button>
     </div>`;
     return;
@@ -197,11 +201,16 @@ function renderHotelPortal(){
           <input name="price" type="number" placeholder="Price" class="border p-2 w-24">
           <button type="submit" class="bg-green-600 text-white px-3 py-1 rounded">Add</button>
         </form>
-        <ul class="mt-2">${rest.menu.map((m,i)=>`<li>${m.name} - KSh ${m.price} <button type="button" data-i="${i}" class="removeMenu text-red-500">x</button></li>`).join("")}</ul>
+        <ul class="mt-2">
+          ${rest.menu.map((m,i)=>`
+            <li>${m.name} - KSh ${m.price} 
+              <button type="button" data-i="${i}" class="removeMenu text-red-500 ml-2">x</button>
+            </li>`).join("")}
+        </ul>
       </div>`;
 }
 
-// --- Admin ---
+// --- Admin --- (Block/unblock, Clear All)
 function renderAdmin(){
   if(!currentAdmin){
     appDiv.innerHTML=`<form id="adminLogin" class="bg-white p-4 rounded shadow">
@@ -214,23 +223,35 @@ function renderAdmin(){
   }
 
   appDiv.innerHTML=`<h2 class="text-xl font-semibold mb-3">Admin Panel</h2>
+    <button type="button" id="clearAll" class="bg-red-700 text-white px-3 py-1 rounded mb-4">Clear All Data</button>
     ${hotels.map(h=>`<div class="bg-white p-3 rounded shadow mb-2 flex justify-between">
       <div>
         <p class="font-semibold">${h.name}</p>
         <p>Till: ${h.till}</p>
         <p>Blocked: ${h.blocked?"Yes":"No"}</p>
       </div>
-      <div class="flex gap-2">
-        <button type="button" data-id="${h.id}" class="toggleBlock bg-red-500 text-white px-2 py-1 rounded">${h.blocked?"Unblock":"Block"}</button>
-        <button type="button" data-id="${h.id}" class="deleteHotel bg-gray-700 text-white px-2 py-1 rounded">Delete</button>
-      </div>
+      <button type="button" data-id="${h.id}" class="toggleBlock bg-red-500 text-white px-2 py-1 rounded">${h.blocked?"Unblock":"Block"}</button>
     </div>`).join("")}`;
 }
 
 // ===== Firestore listeners =====
-onSnapshot(collection(db,"hotels"),snap=>{hotels=snap.docs.map(d=>({id:d.id,...d.data()}));render();});
-onSnapshot(collection(db,"restaurants"),snap=>{restaurants=snap.docs.map(d=>({id:d.id,...d.data()}));render();});
-onSnapshot(collection(db,"orders"),snap=>{orders=snap.docs.map(d=>({id:d.id,...d.data()}));render();});
+onSnapshot(collection(db,"hotels"),snap=>{
+  hotels=snap.docs.map(d=>({id:d.id,...d.data()}));
+  render();
+});
+
+onSnapshot(collection(db,"restaurants"),snap=>{
+  restaurants=snap.docs.map(d=>{
+    const hotel = getHotelById(d.data().hotelId);
+    return {id:d.id,...d.data(), hotelName: hotel.name, till: hotel.till};
+  });
+  render();
+});
+
+onSnapshot(collection(db,"orders"),snap=>{
+  orders=snap.docs.map(d=>({id:d.id,...d.data()}));
+  render();
+});
 
 // ===== Event listeners =====
 document.addEventListener("click", async e=>{
@@ -243,8 +264,17 @@ document.addEventListener("click", async e=>{
     renderRestaurants();
   }
 
+  // Remove from cart
+  if(t.classList.contains("remove")){
+    const idx=parseInt(t.dataset.i);
+    cart.splice(idx,1);
+    renderRestaurants();
+  }
+
+  // Reset cart
   if(t.id==="resetCart"){cart=[];renderRestaurants();}
 
+  // Place order
   if(t.id==="placeOrder"){
     const name=document.getElementById("custName").value.trim();
     const phone=document.getElementById("custPhone").value.trim();
@@ -252,12 +282,21 @@ document.addEventListener("click", async e=>{
     const total=cart.reduce((s,i)=>s+i.price,0)+SERVICE_FEE;
     await addDoc(collection(db,"orders"),{customerName:name,customerPhone:phone,items:cart,total,hotelId:cart[0].hotelId});
     alert("Order placed!");
-    currentCustomer={name,phone};
     cart=[];
     renderRestaurants();
   }
 
-  if(t.id==="logoutHotel"){currentHotelId=null;render();}
+  // Logout hotel
+  if(t.id==="logoutHotel"){currentHotelId=null; render();}
+
+  // Remove menu item
+  if(t.classList.contains("removeMenu")){
+    const i=parseInt(t.dataset.i);
+    const rest=restaurants.find(r=>r.hotelId===currentHotelId);
+    rest.menu.splice(i,1);
+    await setDoc(doc(db,"restaurants",rest.id), rest);
+    renderHotelPortal();
+  }
 
   // Block/unblock hotel
   if(t.classList.contains("toggleBlock")){
@@ -267,20 +306,17 @@ document.addEventListener("click", async e=>{
     await updateDoc(hotelRef,{blocked:!hotel.blocked});
   }
 
-  // Delete hotel + associated restaurants + orders
-  if(t.classList.contains("deleteHotel")){
-    const hid=t.dataset.id;
-    if(confirm("Delete hotel and all associated data?")){
-      // Delete hotel
-      await deleteDoc(doc(db,"hotels",hid));
-      // Delete restaurants
-      restaurants.filter(r=>r.hotelId===hid).forEach(async r=>{
-        await deleteDoc(doc(db,"restaurants",r.id));
-      });
-      // Delete orders
-      orders.filter(o=>o.hotelId===hid).forEach(async o=>{
-        await deleteDoc(doc(db,"orders",o.id));
-      });
+  // Clear all data
+  if(t.id==="clearAll"){
+    if(confirm("Are you sure? This will delete ALL hotels, restaurants, and orders!")){
+      const collections = ["hotels","restaurants","orders"];
+      for(const col of collections){
+        const snapshot = await getDocs(collection(db, col));
+        for(const d of snapshot.docs){
+          await deleteDoc(doc(db,col,d.id));
+        }
+      }
+      alert("All data cleared!");
     }
   }
 });
@@ -336,4 +372,4 @@ document.addEventListener("submit", async e=>{
 });
 </script>
 </body>
-                                            </html>
+  </html>
