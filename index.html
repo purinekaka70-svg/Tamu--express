@@ -46,7 +46,7 @@ const db = getFirestore(app);
 // Variables
 let hotels=[], restaurants=[], orders=[];
 let cart=[], currentTab="restaurants", currentHotelId=null, currentAdmin=null;
-const SERVICE_FEE = 40;
+const SERVICE_FEE = 40 (0115613332);
 const SUBSCRIPTION_FEE = 100;
 const ADMIN = { user: "admin", pass: "TamuAdmin@2025" };
 const appDiv = document.getElementById("app");
@@ -152,7 +152,7 @@ function renderOrders(){
           <p class="text-sm text-gray-600">Hotel: ${hotel.name} | Till: ${hotel.till}</p>
           <ul class="text-sm mt-2">${o.items.map(i=>`<li>${i.name} - KSh ${i.price}</li>`).join("")}</ul>
           <p class="text-sm mt-1">Items Total: KSh ${itemsTotal}</p>
-          <p class="text-sm mt-1">Service Fee: (pay to this number 0115613332)KSh ${SERVICE_FEE}</p>
+          <p class="text-sm mt-1">Service Fee:${SERVICE_FEE}</p>
           <p class="font-semibold mt-1">Total to Pay: KSh ${totalPay}</p>
         </div>`;
     }).join("")}
