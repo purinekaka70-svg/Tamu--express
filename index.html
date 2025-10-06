@@ -43,17 +43,16 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 // Variables
-let hotels=[], restaurants=[], orders=[];
-let cart=[], currentTab="restaurants", currentHotelId=null, currentAdmin=null;
+let hotels = [], restaurants = [], orders = [];
+let cart = [], currentTab = "restaurants", currentHotelId = null, currentAdmin = null, currentCustomer = null;
 const SERVICE_FEE = 40;
 const SUBSCRIPTION_FEE = 100;
 const ADMIN = { user: "admin", pass: "TamuAdmin@2025" };
-const CONTACT_NUMBER = "0115613332";
 const appDiv = document.getElementById("app");
 
 // Hide admin tab initially
 const adminTab = document.querySelector(".tab[data-tab='admin']");
-adminTab.style.display="none";
+adminTab.style.display = "none";
 
 // Tab click
 document.querySelectorAll(".tab").forEach(btn=>{
@@ -61,20 +60,20 @@ document.querySelectorAll(".tab").forEach(btn=>{
 });
 
 // Show admin on footer click 4 times
-let footerClicks=0;
+let footerClicks = 0;
 document.getElementById("footer").addEventListener("click",()=>{
   footerClicks++;
   if(footerClicks>=4){
-    adminTab.style.display="inline-block";
-    switchTab("admin"); 
-    footerClicks=0;
+    adminTab.style.display = "inline-block";
+    switchTab("admin");
+    footerClicks = 0;
   }
 });
 
 function switchTab(tab){
-  currentTab=tab;
+  currentTab = tab;
   document.querySelectorAll(".tab").forEach(b=>{
-    if(b.dataset.tab===tab){
+    if(b.dataset.tab === tab){
       b.classList.add("bg-white","text-green-700","font-semibold");
       b.classList.remove("text-white");
     } else {
@@ -86,40 +85,41 @@ function switchTab(tab){
 }
 
 function getHotelById(id){
-  return hotels.find(h=>h.id===id)||{name:"Unknown",till:CONTACT_NUMBER,subscriptionExpiry:0, blocked:false, approved:true};
+  return hotels.find(h=>h.id===id) || {name:"Unknown", till:"0115613332", subscriptionExpiry:0, blocked:false, approved:true};
 }
 
 // ===== Render functions =====
 function render(){
-  if(currentTab==="restaurants") renderRestaurants();
-  else if(currentTab==="orders") renderOrders();
-  else if(currentTab==="hotel") renderHotelPortal();
-  else if(currentTab==="admin") renderAdmin();
+  if(currentTab === "restaurants") renderRestaurants();
+  else if(currentTab === "orders") renderOrders();
+  else if(currentTab === "hotel") renderHotelPortal();
+  else if(currentTab === "admin") renderAdmin();
 }
 
 // --- Restaurants --- (Customer view)
 function renderRestaurants(){
-  appDiv.innerHTML=`<h2 class="text-xl font-semibold mb-3">All Restaurants</h2>
-  ${restaurants.map(r=>`
+  appDiv.innerHTML = `<h2 class="text-xl font-semibold mb-3">All Restaurants</h2>
+  ${restaurants.filter(r => r.approved).map(r=>`
     <div class="bg-white p-4 rounded shadow mb-3">
       <h3 class="font-bold">${r.hotelName}</h3>
-      <p class="text-sm text-gray-500">Till: ${r.till}</p>
+      <p class="text-sm text-gray-500">Till: 0115613332</p>
       <div class="mt-2">
-        ${r.menu?.length?r.menu.map(item=>`
+        ${r.menu?.length ? r.menu.map(item=>`
           <div class="flex justify-between border-b py-2">
             <span>${item.name} - KSh ${item.price}</span>
             <button type="button" data-hotel="${r.hotelId}" data-name="${item.name}" data-price="${item.price}" class="addToCart bg-green-500 text-white px-2 py-1 rounded text-sm">Add</button>
-          </div>`).join(""):`<p>No items yet</p>`}
+          </div>`).join("") : `<p>No items yet</p>`}
       </div>
     </div>`).join("")}
 
   <div class="bg-white p-4 rounded shadow mt-6">
     <h3 class="font-semibold">Cart</h3>
-    ${cart.length===0?"<p>Empty cart</p>":`
+    ${cart.length===0 ? "<p>Empty cart</p>" : `
       <ul class="mb-2">${cart.map((c,i)=>`<li>${c.name} - KSh ${c.price} <button type="button" data-i="${i}" class="remove text-red-500">x</button></li>`).join("")}</ul>
       <p>Items Total: KSh ${cart.reduce((s,i)=>s+i.price,0)}</p>
       <p>Service Fee: KSh ${SERVICE_FEE}</p>
       <p>Total to Pay: <strong>KSh ${cart.reduce((s,i)=>s+i.price,0)+SERVICE_FEE}</strong></p>
+      <p class="text-sm text-gray-600 mt-1">Pay service fee to: <strong>Pochi Labiashara 0115613332</strong></p>
       <input id="custName" class="border p-1 w-full mt-2" placeholder="Your name">
       <input id="custPhone" class="border p-1 w-full mt-2" placeholder="Your phone">
       <div class="mt-2 flex gap-2">
@@ -131,37 +131,48 @@ function renderRestaurants(){
 
 // --- Orders --- (Customer sees their orders, Hotel sees theirs, Admin sees all)
 function renderOrders(){
-  let visibleOrders;
-  if(currentHotelId){ 
-    visibleOrders = orders.filter(o=>o.hotelId===currentHotelId); 
+  let visibleOrders = [];
+
+  if(currentHotelId){
+    // hotel sees only its orders
+    visibleOrders = orders.filter(o => o.hotelId === currentHotelId);
   } else if(currentAdmin){
     visibleOrders = orders;
+  } else if(currentCustomer){
+    visibleOrders = orders.filter(o => o.customerName === currentCustomer.name && o.customerPhone === currentCustomer.phone);
   } else {
-    // For customers, show all orders
-    visibleOrders = orders;
+    visibleOrders = [];
   }
 
-  appDiv.innerHTML=`<h2 class="text-xl font-semibold mb-3">Orders</h2>
-    ${visibleOrders.length===0?"<p>No orders yet</p>":visibleOrders.map(o=>{
-      const hotel=getHotelById(o.hotelId);
-      const itemsTotal=o.items.reduce((s,i)=>s+i.price,0);
-      const totalPay=o.total ?? (itemsTotal+SERVICE_FEE);
+  appDiv.innerHTML = `<h2 class="text-xl font-semibold mb-3">Orders</h2>
+    ${visibleOrders.length===0 ? "<p>No orders yet</p>" : visibleOrders.map(o=>{
+      const hotel = getHotelById(o.hotelId);
+      const itemsTotal = o.items.reduce((s,i)=>s+i.price,0);
+      const totalPay = o.total ?? (itemsTotal + SERVICE_FEE);
+      const status = o.status || "Pending";
+      // show "Mark as Paid" button only to the hotel that owns the order (or admin)
+      const canMarkPaid = (currentHotelId && currentHotelId === o.hotelId) || currentAdmin;
+      const markPaidBtn = (status !== "Paid" && canMarkPaid) ? `<button type="button" data-id="${o.id}" class="markPaid bg-green-600 text-white px-3 py-1 rounded mt-2">Mark as Paid</button>` : "";
+      const statusBadge = status === "Paid" ? `<span class="text-green-700 font-semibold">Paid ✅</span>` : `<span class="text-yellow-600 font-semibold">Pending ⏳</span>`;
       return `
         <div class="bg-white p-4 rounded shadow mb-3">
-          <h3 class="font-semibold">${o.customerName}</h3>
+          <div class="flex justify-between items-center mb-2">
+            <h3 class="font-semibold">${o.customerName}</h3>
+            <div>${statusBadge}</div>
+          </div>
           <p class="text-sm text-gray-600">Phone: ${o.customerPhone}</p>
-          <p class="text-sm text-gray-600">Hotel: ${hotel.name} | Till: ${hotel.till}</p>
+          <p class="text-sm text-gray-600">Hotel: ${hotel.name} | Till: 0115613332</p>
           <ul class="text-sm mt-2">${o.items.map(i=>`<li>${i.name} - KSh ${i.price}</li>`).join("")}</ul>
           <p class="text-sm mt-1">Items Total: KSh ${itemsTotal}</p>
           <p class="text-sm mt-1">Service Fee: KSh ${SERVICE_FEE}</p>
           <p class="font-semibold mt-1">Total to Pay: KSh ${totalPay}</p>
-          <p class="text-sm mt-1 text-blue-600">For payments, contact: ${CONTACT_NUMBER}</p>
+          ${markPaidBtn}
         </div>`;
     }).join("")}
   `;
 }
 
-// --- Hotel Portal ---
+// --- Hotel Portal --- (Add/Edit menu)
 function renderHotelPortal(){
   if(!currentHotelId){
     appDiv.innerHTML=`<div class="grid md:grid-cols-2 gap-4">
@@ -184,15 +195,15 @@ function renderHotelPortal(){
 
   const hotel = hotels.find(h=>h.id===currentHotelId);
   if(!hotel) return;
-  if(!hotel.subscriptionExpiry || hotel.subscriptionExpiry<Date.now() || hotel.blocked){
+  if(!hotel.subscriptionExpiry || hotel.subscriptionExpiry < Date.now() || hotel.blocked){
     appDiv.innerHTML=`<div class="bg-white p-4 rounded shadow">
-      <p class="text-red-600 font-bold">${hotel.blocked?"Blocked by admin":`Subscription expired. Pay KSh ${SUBSCRIPTION_FEE}`}</p>
+      <p class="text-red-600 font-bold">${hotel.blocked ? "Blocked by admin" : `Subscription expired. Pay KSh ${SUBSCRIPTION_FEE}`}</p>
       <button type="button" id="logoutHotel" class="bg-red-500 text-white px-3 py-1 rounded mt-3">Logout</button>
     </div>`;
     return;
   }
 
-  const rest=restaurants.find(r=>r.hotelId===currentHotelId)||{menu:[]};
+  const rest = restaurants.find(r=>r.hotelId===currentHotelId) || {menu:[]};
   appDiv.innerHTML=`<div class="flex justify-between items-center mb-3">
         <h2 class="font-bold">${hotel.name}</h2>
         <button type="button" id="logoutHotel" class="bg-red-500 text-white px-3 py-1 rounded">Logout</button>
@@ -212,7 +223,7 @@ function renderHotelPortal(){
       </div>`;
 }
 
-// --- Admin ---
+// --- Admin --- (Block/unblock, Approve, Clear All)
 function renderAdmin(){
   if(!currentAdmin){
     appDiv.innerHTML=`<form id="adminLogin" class="bg-white p-4 rounded shadow">
@@ -242,74 +253,109 @@ function renderAdmin(){
 
 // ===== Firestore listeners =====
 onSnapshot(collection(db,"hotels"),snap=>{
-  hotels=snap.docs.map(d=>({id:d.id,...d.data()}));
+  hotels = snap.docs.map(d=>({id:d.id,...d.data()}));
   render();
 });
 
 onSnapshot(collection(db,"restaurants"),snap=>{
-  restaurants=snap.docs.map(d=>{
+  restaurants = snap.docs.map(d=>{
     const hotel = getHotelById(d.data().hotelId);
     return {id:d.id,...d.data(), hotelName: hotel.name, till: hotel.till, approved: hotel.approved};
-  }).filter(r => r.approved);
+  });
   render();
 });
 
 onSnapshot(collection(db,"orders"),snap=>{
-  orders=snap.docs.map(d=>({id:d.id,...d.data()}));
+  orders = snap.docs.map(d=>({id:d.id,...d.data()}));
   render();
 });
 
 // ===== Event listeners =====
 document.addEventListener("click", async e=>{
-  const t=e.target;
+  const t = e.target;
 
+  // Add to cart
   if(t.classList.contains("addToCart")){
-    const name=t.dataset.name, price=parseFloat(t.dataset.price), hotelId=t.dataset.hotel;
+    const name = t.dataset.name, price = parseFloat(t.dataset.price), hotelId = t.dataset.hotel;
     cart.push({name,price,hotelId});
     renderRestaurants();
   }
 
+  // Remove from cart
   if(t.classList.contains("remove")){
-    const idx=parseInt(t.dataset.i);
+    const idx = parseInt(t.dataset.i);
     cart.splice(idx,1);
     renderRestaurants();
   }
 
-  if(t.id==="resetCart"){cart=[];renderRestaurants();}
+  // Reset cart
+  if(t.id==="resetCart"){ cart=[]; renderRestaurants(); }
 
+  // Place order (adds `status: "Pending"` and records currentCustomer)
   if(t.id==="placeOrder"){
-    const name=document.getElementById("custName").value.trim();
-    const phone=document.getElementById("custPhone").value.trim();
-    if(!name||!phone||cart.length===0)return alert("Fill name/phone and add items");
-    const total=cart.reduce((s,i)=>s+i.price,0)+SERVICE_FEE;
-    await addDoc(collection(db,"orders"),{customerName:name,customerPhone:phone,items:cart,total,hotelId:cart[0].hotelId});
-    alert("Order placed!");
-    cart=[];
-    renderRestaurants();
+    const name = document.getElementById("custName").value.trim();
+    const phone = document.getElementById("custPhone").value.trim();
+    if(!name || !phone || cart.length===0) return alert("Fill name/phone and add items");
+    const total = cart.reduce((s,i)=>s+i.price,0) + SERVICE_FEE;
+    await addDoc(collection(db,"orders"),{
+      customerName: name,
+      customerPhone: phone,
+      items: cart,
+      total,
+      hotelId: cart[0].hotelId,
+      status: "Pending",
+      createdAt: Date.now()
+    });
+    alert("Order placed! Pay service fee to Pochi Labiashara 0115613332");
+    // set currentCustomer so they can view their orders
+    currentCustomer = { name, phone };
+    cart = [];
+    // switch to Orders tab so customer can see their order
+    switchTab("orders");
+    render();
   }
 
-  if(t.id==="logoutHotel"){currentHotelId=null; render();}
+  // Logout hotel
+  if(t.id==="logoutHotel"){ currentHotelId = null; render(); }
+
+  // Remove menu item
   if(t.classList.contains("removeMenu")){
-    const i=parseInt(t.dataset.i);
-    const rest=restaurants.find(r=>r.hotelId===currentHotelId);
+    const i = parseInt(t.dataset.i);
+    const rest = restaurants.find(r=>r.hotelId === currentHotelId);
     rest.menu.splice(i,1);
     await setDoc(doc(db,"restaurants",rest.id), rest);
     renderHotelPortal();
   }
 
+  // Block/unblock hotel
   if(t.classList.contains("toggleBlock")){
-    const hid=t.dataset.id;
-    const hotelRef=doc(db,"hotels",hid);
-    const hotel=hotels.find(h=>h.id===hid);
-    await updateDoc(hotelRef,{blocked:!hotel.blocked});
+    const hid = t.dataset.id;
+    const hotelRef = doc(db,"hotels",hid);
+    const hotel = hotels.find(h=>h.id===hid);
+    await updateDoc(hotelRef,{blocked: !hotel.blocked});
   }
 
+  // Approve hotel
   if(t.classList.contains("approveHotel")){
-    const hid=t.dataset.id;
-    const hotelRef=doc(db,"hotels",hid);
-    await updateDoc(hotelRef,{approved:true});
+    const hid = t.dataset.id;
+    const hotelRef = doc(db,"hotels",hid);
+    await updateDoc(hotelRef,{approved: true});
   }
 
+  // Mark order as Paid (only hotel owner or admin can)
+  if(t.classList.contains("markPaid")){
+    const oid = t.dataset.id;
+    const order = orders.find(o=>o.id===oid);
+    if(!order) return alert("Order not found");
+    // verify permission: hotel owner or admin
+    if(currentHotelId && order.hotelId !== currentHotelId && !currentAdmin) {
+      return alert("You don't have permission to change this order.");
+    }
+    await updateDoc(doc(db,"orders",oid), { status: "Paid" });
+    alert("Order marked as Paid.");
+  }
+
+  // Clear all data
   if(t.id==="clearAll"){
     if(confirm("Are you sure? This will delete ALL hotels, restaurants, and orders!")){
       const collections = ["hotels","restaurants","orders"];
@@ -327,53 +373,56 @@ document.addEventListener("click", async e=>{
 // ===== Form submissions =====
 document.addEventListener("submit", async e=>{
   e.preventDefault();
-  const f=e.target;
+  const f = e.target;
 
+  // Hotel Login
   if(f.id==="hotelLogin"){
-    const name=f.name.value.trim();
-    const pass=f.pass.value.trim();
-    const h=hotels.find(h=>h.name===name && h.pass===pass && h.approved);
-    if(!h) return alert("Wrong credentials or hotel not approved");
-    currentHotelId=h.id;
+    const name = f.name.value.trim();
+    const pass = f.pass.value.trim();
+    const h = hotels.find(h=>h.name===name && h.pass===pass && h.approved);
+    if(!h) return alert("Wrong credentials or hotel not approved yet");
+    currentHotelId = h.id;
+    // ensure currentCustomer is cleared when hotel logs in
+    currentCustomer = null;
+    switchTab("orders");
     render();
   }
 
+  // Hotel Register
   if(f.id==="hotelRegister"){
-    const name=f.name.value.trim();
-    const pass=f.pass.value.trim();
-    const till=f.till.value.trim();
-    if(!name||!pass||!till) return alert("Fill all fields");
-    await addDoc(collection(db,"hotels"),{
-      name, pass, till,
-      subscriptionExpiry:Date.now()+30*24*3600*1000,
-      blocked:false,
-      approved:false
-    });
-    alert("Hotel registered! Waiting for admin approval.");
+    const name = f.name.value.trim();
+    const pass = f.pass.value.trim();
+    const till = f.till.value.trim();
+    if(!name || !pass || !till) return alert("Fill all fields");
+    const docRef = await addDoc(collection(db,"hotels"),{name,pass,till,subscriptionExpiry:Date.now()+30*24*3600*1000, blocked:false, approved:false});
+    alert("Hotel registered! Waiting admin approval.");
+    currentHotelId = docRef.id;
     render();
   }
 
+  // Admin Login
   if(f.id==="adminLogin"){
-    const user=f.user.value.trim(), pass=f.pass.value.trim();
-    if(user===ADMIN.user && pass===ADMIN.pass){currentAdmin=true; render();}
+    const user = f.user.value.trim(), pass = f.pass.value.trim();
+    if(user===ADMIN.user && pass===ADMIN.pass){ currentAdmin = true; currentCustomer = null; switchTab("admin"); render(); }
     else alert("Wrong admin credentials");
   }
 
+  // Add Menu
   if(f.id==="addMenu"){
-    const name=f.name.value.trim();
-    const price=parseFloat(f.price.value);
+    const name = f.name.value.trim();
+    const price = parseFloat(f.price.value);
     if(!name || isNaN(price)) return alert("Fill valid name & price");
-    const restRef=doc(db,"restaurants",currentHotelId);
-    const rest=restaurants.find(r=>r.hotelId===currentHotelId);
+    const restRef = doc(db,"restaurants",currentHotelId);
+    const rest = restaurants.find(r=>r.hotelId===currentHotelId);
     if(rest){
-      const newMenu=[...(rest.menu||[]), {name,price}];
+      const newMenu = [...(rest.menu||[]), {name,price}];
       await setDoc(restRef,{...rest,menu:newMenu});
     } else {
       await setDoc(doc(db,"restaurants",currentHotelId),{hotelId:currentHotelId,menu:[{name,price}]});
     }
-renderHotelPortal();
+    renderHotelPortal();
   }
 });
 </script>
 </body>
-</html>
+  </html>
